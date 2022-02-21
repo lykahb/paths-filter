@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.11.0
+- Forked project to https://github.com/lykahb/paths-filter to include the stat feature
+- [Output the stat data](https://github.com/lykahb/paths-filter/pull/3)
+
 ## v2.10.2
 - [Fix getLocalRef() returns wrong ref](https://github.com/dorny/paths-filter/pull/91)
 
