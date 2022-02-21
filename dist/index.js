@@ -3811,41 +3811,27 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isGitSha = exports.getShortName = exports.getCurrentRef = exports.listAllFilesAsAdded = exports.parseGitDiffNumstatOutput = exports.parseGitDiffNameStatusOutput = exports.getChangesSinceMergeBase = exports.getChangesOnHead = exports.getChanges = exports.getChangesInLastCommit = exports.HEAD = exports.NULL_SHA = void 0;
+exports.isGitSha = exports.getShortName = exports.getCurrentRef = exports.listAllFilesAsAdded = exports.parseGitDiffNumstatOutput = exports.getGitDiffStatusNumstat = exports.parseGitDiffNameStatusOutput = exports.getChangesSinceMergeBase = exports.getChangesOnHead = exports.getChanges = exports.getChangesInLastCommit = exports.HEAD = exports.NULL_SHA = void 0;
 const exec_1 = __importDefault(__webpack_require__(807));
 const core = __importStar(__webpack_require__(470));
 const file_1 = __webpack_require__(258);
 exports.NULL_SHA = '0000000000000000000000000000000000000000';
 exports.HEAD = 'HEAD';
 async function getChangesInLastCommit() {
-    return core.group(`Change detection in last commit`, async () => {
-        const diffArg = `HEAD^..HEAD`;
-        const statusFiles = await gitDiffNameStatus(diffArg).then(parseGitDiffNameStatusOutput);
-        const numstatFiles = await gitDiffNumstat(diffArg).then(parseGitDiffNumstatOutput);
-        return mergeStatusNumstat(statusFiles, numstatFiles);
-    });
+    return core.group(`Change detection in last commit`, () => getGitDiffStatusNumstat(`HEAD^..HEAD`));
 }
 exports.getChangesInLastCommit = getChangesInLastCommit;
 async function getChanges(base, head) {
     const baseRef = await ensureRefAvailable(base);
     const headRef = await ensureRefAvailable(head);
     // Get differences between ref and HEAD
-    return core.group(`Change detection ${base}..${head}`, async () => {
-        const diffArg = `${baseRef}..${headRef}`;
-        const statusFiles = await gitDiffNameStatus(diffArg).then(parseGitDiffNameStatusOutput);
-        const numstatFiles = await gitDiffNumstat(diffArg).then(parseGitDiffNumstatOutput);
-        return mergeStatusNumstat(statusFiles, numstatFiles);
-    });
+    // Two dots '..' change detection - directly compares two versions
+    return core.group(`Change detection ${base}..${head}`, () => getGitDiffStatusNumstat(`${baseRef}..${headRef}`));
 }
 exports.getChanges = getChanges;
 async function getChangesOnHead() {
     // Get current changes - both staged and unstaged
-    return core.group(`Change detection on HEAD`, async () => {
-        const diffArg = `HEAD`;
-        const statusFiles = await gitDiffNameStatus(diffArg).then(parseGitDiffNameStatusOutput);
-        const numstatFiles = await gitDiffNumstat(diffArg).then(parseGitDiffNumstatOutput);
-        return mergeStatusNumstat(statusFiles, numstatFiles);
-    });
+    return core.group(`Change detection on HEAD`, () => getGitDiffStatusNumstat(`HEAD`));
 }
 exports.getChangesOnHead = getChangesOnHead;
 async function getChangesSinceMergeBase(base, head, initialFetchDepth) {
@@ -3910,9 +3896,7 @@ async function getChangesSinceMergeBase(base, head, initialFetchDepth) {
         diffArg = `${baseRef}..${headRef}`;
     }
     // Get changes introduced on ref compared to base
-    const statusFiles = await gitDiffNameStatus(diffArg).then(parseGitDiffNameStatusOutput);
-    const numstatFiles = await gitDiffNumstat(diffArg).then(parseGitDiffNumstatOutput);
-    return mergeStatusNumstat(statusFiles, numstatFiles);
+    return getGitDiffStatusNumstat(diffArg);
 }
 exports.getChangesSinceMergeBase = getChangesSinceMergeBase;
 async function gitDiffNameStatus(diffArg) {
@@ -3958,43 +3942,32 @@ function mergeStatusNumstat(statusEntries, numstatEntries) {
         return { ...f, status: status.status };
     });
 }
+async function getGitDiffStatusNumstat(diffArg) {
+    const statusFiles = await gitDiffNameStatus(diffArg).then(parseGitDiffNameStatusOutput);
+    const numstatFiles = await gitDiffNumstat(diffArg).then(parseGitDiffNumstatOutput);
+    return mergeStatusNumstat(statusFiles, numstatFiles);
+}
+exports.getGitDiffStatusNumstat = getGitDiffStatusNumstat;
 function parseGitDiffNumstatOutput(output) {
     const rows = output.split('\u0000').filter(s => s.length > 0);
-    const files = [];
-    for (let i = 0; i + 1 < rows.length; i += 1) {
-        const tokens = rows[i].split('\t');
+    return rows.map(row => {
+        const tokens = row.split('\t');
         // For the binary files set the numbers to zero. This matches the response of Github API.
         const additions = tokens[0] == '-' ? 0 : Number.parseInt(tokens[0]);
         const deletions = tokens[1] == '-' ? 0 : Number.parseInt(tokens[1]);
-        files.push({
+        return {
             filename: tokens[2],
             additions,
             deletions,
-        });
-    }
-    return files;
+        };
+    });
 }
 exports.parseGitDiffNumstatOutput = parseGitDiffNumstatOutput;
 async function listAllFilesAsAdded() {
-    core.startGroup('Listing all files tracked by git');
-    let output = '';
-    try {
-        output = (await exec_1.default('git', ['ls-files', '-z'])).stdout;
-    }
-    finally {
-        fixStdOutNullTermination();
-        core.endGroup();
-    }
-    return output
-        .split('\u0000')
-        .filter(s => s.length > 0)
-        .map(path => ({
-        status: file_1.ChangeStatus.Added,
-        filename: path,
-        additions: 0,
-        deletions: 0,
-        changes: 0
-    }));
+    return core.group(`Listing all files tracked by git`, async () => {
+        const emptyTreeHash = (await exec_1.default('git', ['hash-object', '-t', 'tree', '/dev/null'])).stdout;
+        return getGitDiffStatusNumstat(emptyTreeHash);
+    });
 }
 exports.listAllFilesAsAdded = listAllFilesAsAdded;
 async function getCurrentRef() {

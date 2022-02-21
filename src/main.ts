@@ -326,6 +326,4 @@ function isStatExportFormat(value: string): value is StatExportFormat {
   return ['none', 'csv', 'shell', 'json', 'escape'].includes(value)
 }
 
-
-
 run()

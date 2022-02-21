@@ -6,12 +6,9 @@ export const NULL_SHA = '0000000000000000000000000000000000000000'
 export const HEAD = 'HEAD'
 
 export async function getChangesInLastCommit(): Promise<File[]> {
-  return core.group(`Change detection in last commit`, async () => {
-    const diffArg = `HEAD^..HEAD`
-    const statusFiles = await gitDiffNameStatus(diffArg).then(parseGitDiffNameStatusOutput)
-    const numstatFiles = await gitDiffNumstat(diffArg).then(parseGitDiffNumstatOutput)
-    return mergeStatusNumstat(statusFiles, numstatFiles)
-  })
+  return core.group(`Change detection in last commit`, () =>
+    getGitDiffStatusNumstat(`HEAD^..HEAD`)
+  )
 }
 
 export async function getChanges(base: string, head: string): Promise<File[]> {
@@ -19,22 +16,17 @@ export async function getChanges(base: string, head: string): Promise<File[]> {
   const headRef = await ensureRefAvailable(head)
 
   // Get differences between ref and HEAD
-  return core.group(`Change detection ${base}..${head}`, async () => {
-    const diffArg = `${baseRef}..${headRef}`
-    const statusFiles = await gitDiffNameStatus(diffArg).then(parseGitDiffNameStatusOutput)
-    const numstatFiles = await gitDiffNumstat(diffArg).then(parseGitDiffNumstatOutput)
-    return mergeStatusNumstat(statusFiles, numstatFiles)
-  })
+  // Two dots '..' change detection - directly compares two versions
+  return core.group(`Change detection ${base}..${head}`, () =>
+    getGitDiffStatusNumstat(`${baseRef}..${headRef}`)
+  )
 }
 
 export async function getChangesOnHead(): Promise<File[]> {
   // Get current changes - both staged and unstaged
-  return core.group(`Change detection on HEAD`, async () => {
-    const diffArg = `HEAD`
-    const statusFiles = await gitDiffNameStatus(diffArg).then(parseGitDiffNameStatusOutput)
-    const numstatFiles = await gitDiffNumstat(diffArg).then(parseGitDiffNumstatOutput)
-    return mergeStatusNumstat(statusFiles, numstatFiles)
-  })  
+  return core.group(`Change detection on HEAD`, () =>
+    getGitDiffStatusNumstat(`HEAD`)
+  )
 }
 
 export async function getChangesSinceMergeBase(base: string, head: string, initialFetchDepth: number): Promise<File[]> {
@@ -106,9 +98,7 @@ export async function getChangesSinceMergeBase(base: string, head: string, initi
   }
 
   // Get changes introduced on ref compared to base
-  const statusFiles = await gitDiffNameStatus(diffArg).then(parseGitDiffNameStatusOutput)
-  const numstatFiles = await gitDiffNumstat(diffArg).then(parseGitDiffNumstatOutput)
-  return mergeStatusNumstat(statusFiles, numstatFiles)
+  return getGitDiffStatusNumstat(diffArg)
 }
 
 async function gitDiffNameStatus(diffArg: string): Promise<string> {
@@ -156,44 +146,33 @@ function mergeStatusNumstat(statusEntries: FileStatus[], numstatEntries: FileNum
   })
 }
 
+export async function getGitDiffStatusNumstat(diffArg: string) {
+  const statusFiles = await gitDiffNameStatus(diffArg).then(parseGitDiffNameStatusOutput)
+  const numstatFiles = await gitDiffNumstat(diffArg).then(parseGitDiffNumstatOutput)
+  return mergeStatusNumstat(statusFiles, numstatFiles)
+}
+
 export function parseGitDiffNumstatOutput(output: string): FileNumstat[] {
   const rows = output.split('\u0000').filter(s => s.length > 0)
-  const files: FileNumstat[] = []
-  for (let i = 0; i + 1 < rows.length; i += 1) {
-    const tokens = rows[i].split('\t')
+  return rows.map(row => {
+    const tokens = row.split('\t')
     // For the binary files set the numbers to zero. This matches the response of Github API.
     const additions = tokens[0] == '-' ? 0 : Number.parseInt(tokens[0])
     const deletions = tokens[1] == '-' ? 0 : Number.parseInt(tokens[1])
-    files.push({
+    return {
       filename: tokens[2],
       additions,
       deletions,
-    })
-  }
-  return files
+    }
+  })
 }
 
 
 export async function listAllFilesAsAdded(): Promise<File[]> {
-  core.startGroup('Listing all files tracked by git')
-  let output = ''
-  try {
-    output = (await exec('git', ['ls-files', '-z'])).stdout
-  } finally {
-    fixStdOutNullTermination()
-    core.endGroup()
-  }
-
-  return output
-    .split('\u0000')
-    .filter(s => s.length > 0)
-    .map(path => ({
-      status: ChangeStatus.Added,
-      filename: path,
-      additions: 0,  // TODO: find value for addition
-      deletions: 0,
-      changes: 0
-    }))
+  return core.group(`Listing all files tracked by git`, async () => {
+    const emptyTreeHash = (await exec('git', ['hash-object', '-t', 'tree', '/dev/null'])).stdout
+    return getGitDiffStatusNumstat(emptyTreeHash)
+  })
 }
 
 export async function getCurrentRef(): Promise<string> {

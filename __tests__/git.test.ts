@@ -14,6 +14,19 @@ describe('parsing output of the git diff command', () => {
     expect(files[2].filename).toBe('src/main.ts')
     expect(files[2].status).toBe(ChangeStatus.Deleted)
   })
+
+  test('parseGitDiffNumstatOutput returns files with correct change status', async () => {
+    const files = git.parseGitDiffNumstatOutput(
+      '4\t2\tLICENSE\u0000' + '5\t0\tsrc/index.ts\u0000'
+    )
+    expect(files.length).toBe(2)
+    expect(files[0].filename).toBe('LICENSE')
+    expect(files[0].additions).toBe(4)
+    expect(files[0].deletions).toBe(2)
+    expect(files[1].filename).toBe('src/index.ts')
+    expect(files[1].additions).toBe(5)
+    expect(files[1].deletions).toBe(0)
+  })
 })
 
 describe('git utility function tests (those not invoking git)', () => {
