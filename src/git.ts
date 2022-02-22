@@ -142,7 +142,7 @@ export function parseGitDiffNameStatusOutput(output: string): FileStatus[] {
   return files
 }
 
-function mergeStatusNumstat(statusEntries: FileStatus[], numstatEntries: FileNumstat[]): (File & FileNumstat)[] {
+function mergeStatusNumstat(statusEntries: FileStatus[], numstatEntries: FileNumstat[]): File[] {
   const statusMap: {[key: string]: FileStatus} = {}
   statusEntries.forEach(f => statusMap[f.filename] = f)
 

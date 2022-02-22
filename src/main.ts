@@ -4,7 +4,7 @@ import * as github from '@actions/github'
 import {Webhooks} from '@octokit/webhooks'
 
 import {Filter, FilterResults} from './filter'
-import {File, ChangeStatus, FileNumstat} from './file'
+import {File, ChangeStatus} from './file'
 import * as git from './git'
 import {backslashEscape, shellEscape} from './list-format/shell-escape'
 import {csvEscape} from './list-format/csv-escape'
@@ -166,12 +166,12 @@ async function getChangedFilesFromGit(base: string, head: string, initialFetchDe
 async function getChangedFilesFromApi(
   token: string,
   prNumber: Webhooks.WebhookPayloadPullRequestPullRequest
-): Promise<(File & FileNumstat)[]> {
+): Promise<File[]> {
   core.startGroup(`Fetching list of changed files for PR#${prNumber.number} from Github API`)
   try {
     const client = new github.GitHub(token)
     const per_page = 100
-    const files: (File & FileNumstat)[] = []
+    const files: File[] = []
 
     for (let page = 1; ; page++) {
       core.info(`Invoking listFiles(pull_number: ${prNumber.number}, page: ${page}, per_page: ${per_page})`)
