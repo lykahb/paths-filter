@@ -3818,7 +3818,19 @@ const file_1 = __webpack_require__(258);
 exports.NULL_SHA = '0000000000000000000000000000000000000000';
 exports.HEAD = 'HEAD';
 async function getChangesInLastCommit() {
-    return core.group(`Change detection in last commit`, () => getGitDiffStatusNumstat(`HEAD^..HEAD`));
+    return core.group(`Change detection in last commit`, async () => {
+        try {
+            // Calling git log on the last commit works when only the last commit may be checked out. Calling git diff HEAD^..HEAD needs two commits.
+            const statusOutput = (await exec_1.default('git', ['log', '--format=', '--no-renames', '--name-status', '-z', '-n', '1'])).stdout;
+            const numstatOutput = (await exec_1.default('git', ['log', '--format=', '--no-renames', '--numstat', '-z', '-n', '1'])).stdout;
+            const statusFiles = parseGitDiffNameStatusOutput(statusOutput);
+            const numstatFiles = parseGitDiffNumstatOutput(numstatOutput);
+            return mergeStatusNumstat(statusFiles, numstatFiles);
+        }
+        finally {
+            fixStdOutNullTermination();
+        }
+    });
 }
 exports.getChangesInLastCommit = getChangesInLastCommit;
 async function getChanges(base, head) {
