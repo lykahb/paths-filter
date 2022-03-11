@@ -1,0 +1,49 @@
+name: "Pull Request Verification"
+on:
+  pull_request:
+    paths-ignore: [ '*.md' ]
+    branches:
+      - master
+      - '**'
+  push:
+
+jobs:
+  comment:
+    if: github.event.pull_request
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ./
+      id: filter
+      with:
+        stat: json
+        filters: |
+          src:
+            - "src/**"
+          tests:
+            - "__tests__/**"
+    - uses: peter-evans/find-comment@v1
+      id: find-comment
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        comment-author: 'github-actions[bot]'
+        body-includes: '<!-- Paths Filter Diff Stat -->'
+    - id: make-comment-body
+      run: |
+        JQ_FILTER='to_entries | group_by(.key=="other") | flatten | .[] | select (.value.fileCount > 0) | "| \(.key) | \(.value.fileCount) | \(.value.additionCount) | \(.value.deletionCount) |"'
+        COMMENT_BODY=$(echo '${{ steps.filter.outputs.stat }}' | jq --raw-output "$JQ_FILTER")
+        COMMENT_BODY="${COMMENT_BODY//'%'/'%25'}"
+        COMMENT_BODY="${COMMENT_BODY//$'\n'/'%0A'}"
+        COMMENT_BODY="${COMMENT_BODY//$'\r'/'%0D'}"
+        echo "::set-output name=comment_body::$COMMENT_BODY"
+    - uses: peter-evans/create-or-update-comment@v1
+      id: create-or-update-comment
+      with:
+        comment-id: ${{ steps.find-comment.outputs.comment-id }}
+        issue-number: ${{ github.event.pull_request.number }}
+        body: |
+          <!-- Paths Filter Diff Stat -->
+          | Group  | Files changed | Additions | Deletions |
+          | ------ | ------------- | --------- | --------- |
+          ${{ steps.make-comment-body.outputs.comment_body }}
+        edit-mode: replace
